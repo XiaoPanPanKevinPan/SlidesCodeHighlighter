@@ -40,6 +40,14 @@ export function setTheme(theme, typeSize) {
     highlightColor, lineHeight } = theme;
   lineHeight = lineHeight || 1.5;
   let css = `
+    #output::after {
+      /* to avoid background color being copied to clipboard */
+      background-color: ${bgColor};
+    }
+  `;
+  // the following string is commented out.
+
+  `
     #output pre,
     #output pre mark {
       line-height: ${lineHeight * typeSize}px;
@@ -52,10 +60,6 @@ export function setTheme(theme, typeSize) {
     }
     #output.has-highlights[data-seltreat="highlight"] pre mark {
       background-color: ${highlightColor || 'yellow'};
-    }
-    #output::after {
-      /* to avoid background color being copied to clipboard */
-      background-color: ${bgColor};
     }
 
     #output pre .token.comment,
@@ -123,10 +127,10 @@ export function setTheme(theme, typeSize) {
     }
   `;
 
-  $('[theme-rules]').remove();
+  $('[data-theme-rules]').remove();
 
   $('<style>')
-    .attr('theme-rules', true)
+    .attr('data-theme-rules', true)
     .text(css)
     .appendTo(document.body);
   $('.message-bgcolor').text(`Set your background color to: ${bgColor.toUpperCase()}`);

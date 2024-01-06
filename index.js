@@ -19,6 +19,7 @@ import * as monaco from 'monaco-editor'; // TODO: figure out how to minify the b
 import WebFont from 'webfontloader';
 import './index.scss';
 import { DEFAULT_THEMES, setTheme, THEME_PROPERTIES } from './themes.js';
+import { highlight } from './highlighter.js';
 
 const WARN_LINES = 15;
 const WARN_LINE_LENGTH = 80;
@@ -269,13 +270,15 @@ function updateOutputArea() {
   $output.empty();
 
   // set theme
+  let theme;
   if (config.theme == 'custom') {
     $('.custom-theme-area').css('display', 'flex');
-    setTheme(config.customTheme, config.typeSize);
+    theme = config.customTheme;
   } else {
     $('.custom-theme-area').css('display', 'none');
-    setTheme(DEFAULT_THEMES[config.theme], config.typeSize);
+    theme = DEFAULT_THEMES[config.theme];
   }
+  setTheme(theme, config.typeSize);
 
   // build pre element
   let $pre = $('<pre>')
@@ -284,6 +287,8 @@ function updateOutputArea() {
       'font-family': config.font,
       'font-size': `${config.typeSize}px`,
       'background': 'transparent',
+      'line-height': theme.lineHeight,
+  	  'color': `${theme.textColor}`
     })
     .appendTo($output);
   let lang = config.lang;
@@ -298,11 +303,16 @@ function updateOutputArea() {
 
   $('#lang').removeClass('is-invalid');
 
-  let html = Prism.highlight(
+  // let html = Prism.highlight(
+  //   cleanupCode(config.code).code,
+  //   Prism.languages[lang], lang
+  // );
+  let html = highlight(
     cleanupCode(config.code).code,
-    Prism.languages[lang], lang);
+    Prism.languages[lang], lang, theme
+  );
   $pre.html(html);
-  highlightSelection();
+  highlightSelection(theme);
 
   // add line numbers
   if (false) {
@@ -356,19 +366,28 @@ function updateOutputArea() {
 
 const htmlEscape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function highlightSelection() {
+function highlightSelection(theme) {
   if (!editor) {
     return;
   }
 
-  $output.removeClass('has-highlights');
-  $output.removeAttr('data-seltreat');
+  // $output.removeClass('has-highlights');
+  // $output.removeAttr('data-seltreat');
 
-  if (config.selectionTreatment == '--') {
+  let treatment = config.selectionTreatment;
+  if (treatment == '--') // -- means "Do nothing"
     return;
-  }
 
-  $output.attr('data-seltreat', config.selectionTreatment);
+  let nonSelectionStyle = 
+    treatment == "focus" ? { color: theme.dimmedColor || "grey" }
+    : {};
+  let selectionStyle = 
+    treatment == "highlight" ? { "background-color": theme.highlightColor || "Yellow" }
+    : treatment == "bold" ? { "font-weight": "bold", "background-color" : "unset" }
+    : { "background-color" : "unset" };
+  // selectionStyle["line-height"] = 
+
+  // $output.attr('data-seltreat', config.selectionTreatment);
 
   let rawCode = config.code;
   let { code, commonIndent, leadingEmptyLines } = cleanupCode(rawCode);
@@ -382,7 +401,7 @@ function highlightSelection() {
       * (config.tabSize - 1)
       + column - commonIndent);
 
-  let hasHighlights = false;
+  // let hasHighlights = false;
   for (let range of editor.getSelections()) {
     let targetStartPos = rangeToCharPos({ row: range.startLineNumber - 1, column: range.startColumn - 1 });
     let targetEndPos = rangeToCharPos({ row: range.endLineNumber - 1, column: range.endColumn - 1 });
@@ -390,7 +409,7 @@ function highlightSelection() {
     if (targetEndPos == targetStartPos) {
       continue;
     }
-    hasHighlights = true;
+    // hasHighlights = true;
 
     let childStartPos = 0;
 
@@ -413,26 +432,34 @@ function highlightSelection() {
           let startInChild = Math.max(0, targetStartPos - childStartPos);
           let endInChild = Math.min(childContent.length, childContent.length - (childEndPos - targetEndPos));
 
-          let makeSub = (tag, start, end) => {
+          let makeSub = (child, tag, start, end, style) => {
             if (start == end) {
               return null;
             }
 
             let f = document.createElement(tag);
-            if (child.className) {
-              f.className = child.className;
-            } else if (emptyClass) {
+
+            if(child instanceof Element)
+              for(const attrName of child.getAttributeNames())
+                f.setAttribute(attrName, child.getAttribute(attrName));
+
+            if(!child.className && emptyClass)
               f.className = emptyClass;
-            }
+
+            Object.entries(style).forEach(([key, value]) => f.style[key] = value);
+
             f.innerHTML = htmlEscape(childContent.substring(start, end));
             return f;
           };
 
           child.replaceWith.apply(child, [
-            makeSub('span', 0, startInChild),
-            makeSub('mark', startInChild, endInChild),
-            makeSub('span', endInChild, childContent.length),
+            makeSub(child, 'span', 0, startInChild, nonSelectionStyle),
+            makeSub(child, 'mark', startInChild, endInChild, selectionStyle),
+            makeSub(child, 'span', endInChild, childContent.length, nonSelectionStyle),
           ].filter(s => !!s));
+        } else {
+          if(child instanceof Element)
+            Object.entries(nonSelectionStyle).forEach(([key, value]) => child.style[key] = value)
         }
 
         childStartPos = childEndPos;
@@ -442,7 +469,7 @@ function highlightSelection() {
     traverse_(preRoot);
   }
 
-  $output.toggleClass('has-highlights', hasHighlights);
+  // $output.toggleClass('has-highlights', hasHighlights);
 }
 
 function addLineNumbers() {
