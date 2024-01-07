@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+
 import $ from 'jquery';
 import * as monaco from 'monaco-editor'; // TODO: figure out how to minify the bundle
 import WebFont from 'webfontloader';
@@ -364,29 +365,24 @@ function updateOutputArea() {
       .appendTo($messages));
 }
 
-const htmlEscape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// const htmlEscape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function highlightSelection(theme) {
-  if (!editor) {
-    return;
-  }
+function highlightSelection() {
+  if (!editor) return;
 
   // $output.removeClass('has-highlights');
   // $output.removeAttr('data-seltreat');
 
-  let treatment = config.selectionTreatment;
-  if (treatment == '--') // -- means "Do nothing"
-    return;
+  const treatment = config.selectionTreatment;
+  if (treatment == '--') return;
 
-  let nonSelectionStyle = 
+  const nonSelectionStyle = 
     treatment == "focus" ? { color: theme.dimmedColor || "grey" }
     : {};
-  let selectionStyle = 
+  const selectionStyle = 
     treatment == "highlight" ? { "background-color": theme.highlightColor || "Yellow" }
-    : treatment == "bold" ? { "font-weight": "bold", "background-color" : "unset" }
-    : { "background-color" : "unset" };
-  // selectionStyle["line-height"] = 
-
+    : treatment == "bold" ? { "font-weight": "bold" }
+    : {};
   // $output.attr('data-seltreat', config.selectionTreatment);
 
   let rawCode = config.code;
@@ -413,53 +409,60 @@ function highlightSelection(theme) {
 
     let childStartPos = 0;
 
-    let traverse_ = (parent, emptyClass = '') => {
-      for (let child of Array.from(parent.childNodes)) {
-        if (child.childNodes.length >= 2 ||
-          (child.childNodes.length >= 1
-            && child.childNodes[0].nodeType != 3 /* TEXT */)) {
+    let traverse_ = (parent) => {
+      for(let child of Array.from(parent.childNodes)) {
+        if(
+          child.childNodes.length >= 2 
+          || (child.childNodes.length == 1 && child.childNodes[0] instanceof Text)
+        ) {
           // this is a complex element, traverse it instead of treating it
           // as a leaf nodeS
-          traverse_(child, child.className);
+          traverse_(child);
           continue;
         }
 
         let childContent = child.textContent;
         let childEndPos = childStartPos + childContent.length;
 
-        if (targetStartPos < childEndPos && targetEndPos >= childStartPos) {
+        if(targetStartPos < childEndPos && targetEndPos >= childStartPos) {
+          if(!(child instanceof Text)) {
+            traverse_(child); 
+              // so the text node inside will be split 
+              // into multiple <span>
+            continue;
+          }
+
           // some overlap
           let startInChild = Math.max(0, targetStartPos - childStartPos);
           let endInChild = Math.min(childContent.length, childContent.length - (childEndPos - targetEndPos));
 
-          let makeSub = (child, tag, start, end, style) => {
-            if (start == end) {
+          let makeSub = (tag, start, end, style) => {
+            if (start == end)
               return null;
-            }
 
             let f = document.createElement(tag);
-
-            if(child instanceof Element)
-              for(const attrName of child.getAttributeNames())
-                f.setAttribute(attrName, child.getAttribute(attrName));
-
-            if(!child.className && emptyClass)
-              f.className = emptyClass;
-
+            f.textContent = childContent.substring(start, end);
             Object.entries(style).forEach(([key, value]) => f.style[key] = value);
-
-            f.innerHTML = htmlEscape(childContent.substring(start, end));
             return f;
           };
 
           child.replaceWith.apply(child, [
-            makeSub(child, 'span', 0, startInChild, nonSelectionStyle),
-            makeSub(child, 'mark', startInChild, endInChild, selectionStyle),
-            makeSub(child, 'span', endInChild, childContent.length, nonSelectionStyle),
+            makeSub('span', 0, startInChild, nonSelectionStyle),
+            makeSub('span', startInChild, endInChild, selectionStyle), 
+              // change to span so we don't need to deal with user-agent styles
+            makeSub('span', endInChild, childContent.length, nonSelectionStyle),
           ].filter(s => !!s));
-        } else {
-          if(child instanceof Element)
-            Object.entries(nonSelectionStyle).forEach(([key, value]) => child.style[key] = value)
+        } else { // no overlap
+          let elem;
+          if(child instanceof Element) {
+            elem = child;
+          } else {
+            elem = document.createElement("span");
+            elem.textContent = childContent;
+            child.replaceWith(elem);
+          }
+          
+          Object.entries(nonSelectionStyle).forEach(([key, value]) => elem.style[key] = value);
         }
 
         childStartPos = childEndPos;
@@ -471,6 +474,7 @@ function highlightSelection(theme) {
 
   // $output.toggleClass('has-highlights', hasHighlights);
 }
+
 
 function addLineNumbers() {
   let $pre = $output.find('pre');
