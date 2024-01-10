@@ -367,7 +367,7 @@ function updateOutputArea() {
 
 // const htmlEscape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function highlightSelection() {
+function highlightSelection(theme) {
   if (!editor) return;
 
   // $output.removeClass('has-highlights');
@@ -380,7 +380,7 @@ function highlightSelection() {
     treatment == "focus" ? { color: theme.dimmedColor || "grey" }
     : {};
   const selectionStyle = 
-    treatment == "highlight" ? { "background-color": theme.highlightColor || "Yellow" }
+    treatment == "highlight" ? { "background-color": (theme.highlightColor || "Yellow") }
     : treatment == "bold" ? { "font-weight": "bold" }
     : {};
   // $output.attr('data-seltreat', config.selectionTreatment);
